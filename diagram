@@ -1,0 +1,88 @@
+// ============================================
+// CHICAGO CRIME DATA WAREHOUSE
+// STAR SCHEMA (đã chỉnh sửa)
+// ============================================
+
+// ============================================
+// 1. DIMENSION TABLES
+// ============================================
+
+// Bảng chiều phân loại tội phạm
+Table dim_crime_type {
+  iucr_id integer [pk, increment]
+  iucr_code varchar [not null, note: 'Mã Illinois Uniform Crime Reporting']
+  primary_type varchar [not null, note: 'Loại tội phạm chính']
+  description varchar [note: 'Mô tả chi tiết']
+  fbi_code varchar [note: 'Mã phân loại FBI']
+}
+
+// Bảng chiều địa điểm
+Table dim_location {
+  location_id integer [pk, increment]
+  block varchar [note: 'Khối nhà / địa chỉ rút gọn']
+  location_description varchar [note: 'Loại địa điểm']
+  community_area integer [note: 'Khu vực cộng đồng 1-77']
+  ward integer [note: 'Khu vực hội đồng thành phố']
+}
+
+// Bảng chiều địa lý cảnh sát
+Table dim_police_geography {
+  police_geo_id integer [pk, increment]
+  beat integer [note: 'Khu vực tuần tra']
+  district integer [note: 'Quận cảnh sát']
+}
+
+// Bảng chiều NGÀY (grain = 1 ngày, KHÔNG chứa timestamp đầy đủ)
+Table dim_date {
+  date_id integer [pk, increment]
+  full_date date [not null, note: 'Ngày xảy ra vụ việc (YYYY-MM-DD)']
+  year integer
+  month integer
+  day integer
+  day_of_week varchar
+  quarter integer
+  is_weekend boolean [note: 'Cờ cuối tuần, tiện cho phân tích']
+}
+
+// (Tùy chọn) Bảng chiều GIỜ nếu muốn chuẩn hóa hoàn toàn
+Table dim_hour {
+  hour_id integer [pk, increment]
+  hour integer [not null, note: 'Giờ trong ngày, 0-23']
+  time_period varchar [note: 'Buổi: Sáng/Chiều/Tối/Đêm']
+}
+
+// ============================================
+// 2. FACT TABLE
+// ============================================
+
+Table fact_crimes {
+  crime_id integer [pk, increment, note: 'ID bản ghi vụ án']
+  case_number varchar [not null, note: 'Mã hồ sơ cảnh sát - KHÔNG unique, 1 case có thể có nhiều dòng']
+
+  // Foreign Keys
+  iucr_id integer [not null]
+  location_id integer [not null]
+  police_geo_id integer [not null]
+  date_id integer [not null]
+  hour_id integer [note: 'FK tới dim_hour, có thể null nếu chọn cách degenerate']
+
+  // Degenerate dimension - giữ timestamp gốc để truy vấn chính xác
+  full_datetime timestamp [not null, note: 'Thời gian đầy đủ xảy ra vụ việc, giữ nguyên từ nguồn']
+
+  // Crime indicators
+  is_arrest boolean [note: 'Có bắt giữ hay không']
+  is_domestic boolean [note: 'Có phải bạo lực gia đình hay không']
+  crime_count integer [default: 1, note: 'Số vụ việc']
+
+
+}
+
+// ============================================
+// 3. RELATIONSHIPS
+// ============================================
+
+Ref: fact_crimes.iucr_id > dim_crime_type.iucr_id
+Ref: fact_crimes.location_id > dim_location.location_id
+Ref: fact_crimes.police_geo_id > dim_police_geography.police_geo_id
+Ref: fact_crimes.date_id > dim_date.date_id
+Ref: fact_crimes.hour_id > dim_hour.hour_id
